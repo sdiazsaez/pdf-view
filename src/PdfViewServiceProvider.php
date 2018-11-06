@@ -19,4 +19,5 @@ class PdfViewServiceProvider extends ServiceProvider {
                          ]);
     }
 
+    public function register(){}
 }
