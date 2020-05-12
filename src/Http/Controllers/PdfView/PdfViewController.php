@@ -19,14 +19,26 @@ use Illuminate\View\View;
 class PdfViewController {
 
     public function preview($id, $type) {
-        return $this->getView($id, $type);
+        try {
+            return $this->getView($id, $type);
+        } catch (\Exception $e) {
+            $this->showExceptionMessage($e);
+        }
     }
 
     public function pdfBuild($id, $type) {
-        $view = $this->getView($id, $type);
-        $pdf = \App::make('dompdf.wrapper');
-        $pdf->loadHTML($view->render());
-        return $pdf->stream();
+        try {
+            $view = $this->getView($id, $type);
+            $pdf = \App::make('dompdf.wrapper');
+            $pdf->loadHTML($view->render());
+            return $pdf->stream();
+        } catch (\Exception $e) {
+            $this->showExceptionMessage($e);
+        }
+    }
+
+    private function showExceptionMessage(\Exception $e) {
+        echo __('pdf-view.exception', ['message' => $e->getMessage()]);
     }
 
     private function getView($id, $type): View {
