@@ -1,54 +1,50 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: simon
- * Date: 10/22/18
- * Time: 17:37
- */
 
 namespace Larangular\PdfView\Http\Controllers\PdfView;
 
-use Illuminate\Contracts\Mail\Mailable;
-use Larangular\EmailRecord\Models\EmailRequest;
-use \Illuminate\Support\Facades\Mail;
-use Larangular\EmailRecord\Models\SentEmail;
-use Larangular\Support\Instance;
-use Larangular\EmailRecord\Http\Controllers\Emails\RecordableEmail;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
+use Larangular\Support\Instance;
 
 class PdfViewController {
 
-    public function preview($id, $type) {
+    private $content;
+
+    public function show(int $id, string $type, ?string $extension = '') {
         try {
-            return $this->getView($id, $type);
+            $builder = $this->getBuilder(config('pdf-view.pdf_types.' . $type), $id);
+            switch ($extension) {
+                case 'json':
+                    return $this->getBuilderContent($builder);
+                    break;
+                case 'pdf':
+                    return $this->viewToPdf($this->getView($builder));
+                    break;
+                default:
+                    return $this->getView($builder);
+                    break;
+            }
+
         } catch (\Exception $e) {
-            $this->showExceptionMessage($e);
+            abort(404);
+            //$this->showExceptionMessage($e);
         }
     }
 
-    public function pdfBuild($id, $type) {
-        try {
-            $view = $this->getView($id, $type);
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->loadHTML($view->render());
-            return $pdf->stream();
-        } catch (\Exception $e) {
-            $this->showExceptionMessage($e);
-        }
+    private function viewToPdf(View $view): Response {
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->loadHTML($view->render());
+        return $pdf->stream();
     }
 
     private function showExceptionMessage(\Exception $e) {
         echo __('pdf-view.exception', ['message' => $e->getMessage()]);
     }
 
-    private function getView($id, $type): View {
-        $view = null;
-        $builder = $this->getBuilder(config('pdf-view.pdf_types.' . $type), $id);
-        if (Instance::hasInterface($builder, PdfViewBuilder::class)) {
-            $view = view($builder->templatePath(), $builder->content());
-        }
-
-        return $view;
+    private function getView(PdfViewBuilder $builder): ?View {
+        return (Instance::hasInterface($builder, PdfViewBuilder::class))
+            ? view($builder->templatePath(), $this->getBuilderContent($builder))
+            : null;
     }
 
     private function getBuilder(string $type, int $contentId): PdfViewBuilder {
@@ -57,5 +53,14 @@ class PdfViewController {
         return $viewer;
     }
 
+    private function getBuilderContent(PdfViewBuilder $builder): array {
+        if (is_null($this->content)) {
+            $this->content = $builder->content();
+        }
 
+        if (empty($this->content)) {
+            throw new \Exception('content cant be empty');
+        }
+        return $this->content;
+    }
 }
