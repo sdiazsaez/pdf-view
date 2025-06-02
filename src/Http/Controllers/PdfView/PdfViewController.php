@@ -11,34 +11,24 @@ class PdfViewController {
     private $content;
 
     public function show(int $id, string $type, ?string $extension = '') {
-        try {
-            $builder = $this->getBuilder(config('pdf-view.pdf_types.' . $type), $id);
-            switch ($extension) {
-                case 'json':
-                    return $this->getBuilderContent($builder);
-                    break;
-                case 'pdf':
-                    return $this->viewToPdf($this->getView($builder));
-                    break;
-                default:
-                    return $this->getView($builder);
-                    break;
-            }
+        $builder = $this->getBuilder(config("pdf-view.pdf_types.{$type}"), $id);
 
-        } catch (\Exception $e) {
-            abort(404);
-            //$this->showExceptionMessage($e);
+        if ($extension === 'json') {
+            return $this->getBuilderContent($builder);
         }
+
+        $view = $this->getView($builder);
+
+        return ($extension === 'pdf')
+            ? $this->viewToPdf($view)
+            : $view;
     }
+
 
     private function viewToPdf(View $view): Response {
         $pdf = \App::make('dompdf.wrapper');
         $pdf->loadHTML($view->render());
         return $pdf->stream();
-    }
-
-    private function showExceptionMessage(\Exception $e) {
-        echo __('pdf-view.exception', ['message' => $e->getMessage()]);
     }
 
     private function getView(PdfViewBuilder $builder): ?View {
@@ -48,19 +38,38 @@ class PdfViewController {
     }
 
     private function getBuilder(string $type, int $contentId): PdfViewBuilder {
-        $viewer = new $type;
+        if (!class_exists($type)) {
+            throw new Exception("Invalid PDF view type: {$type}");
+        }
+
+        $viewer = new $type();
         $viewer->setContentId($contentId);
+
         return $viewer;
     }
 
     private function getBuilderContent(PdfViewBuilder $builder): array {
+        if (method_exists($builder, 'isValid') && !$builder->isValid()) {
+            abort(404, 'PDF not found for the given ID');
+        }
+
         if (is_null($this->content)) {
             $this->content = $builder->content();
         }
 
         if (empty($this->content)) {
-            throw new \Exception('content cant be empty');
+            throw new \Exception('Content cannot be empty');
         }
+
         return $this->content;
     }
+
+    private function handleException(\Exception $e): Response {
+        // Swap to logging or JSON response as needed
+        return response(
+            __('pdf-view.exception', ['message' => $e->getMessage()]),
+            500
+        );
+    }
+
 }
